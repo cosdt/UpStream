@@ -1,0 +1,36 @@
+name: Notify B repo CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+
+    # 防 fork + 显式触发
+    if: >
+      github.event.pull_request.head.repo.full_name
+      == github.repository
+      && contains(
+           github.event.pull_request.labels.*.name,
+           'run-b-ci'
+         )
+
+    concurrency:
+      group: a-to-b-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Notify CI Server
+        run: |
+          curl -X POST https://ci-gateway.example.com/trigger \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "source_repo": "A",
+              "pr": ${{ github.event.pull_request.number }},
+              "sha": "${{ github.event.pull_request.head.sha }}",
+              "run_id": "${{ github.run_id }}",
+              "actor": "${{ github.actor }}"
+            }'
