@@ -1,8 +1,8 @@
 L1:
-- repo: cosdt/DownStream1
-  device: Device1
-  url: https://github.com/cosdt/DownStream1
-  oncall: []
+  - repo: cosdt/DownStream1
+    device: Device1
+    url: https://github.com/cosdt/DownStream1
+    oncall: []
 
 L2:
   - repo: cosdt/DownStream2
