@@ -1,14 +1,14 @@
-L1:
-  - repo: cosdt/DownStream2
-    device: Device2
-    url: https://github.com/cosdt/DownStream2
-    oncall: []
+L1: []
 
 L2:
   - repo: cosdt/DownStream1
     device: Device1
     url: https://github.com/cosdt/DownStream1
     oncall: [fffrog]
+  - repo: cosdt/DownStream2
+    device: Device2
+    url: https://github.com/cosdt/DownStream2
+    oncall: []
 
 L3: []
 
