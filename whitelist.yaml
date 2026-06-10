@@ -6,7 +6,6 @@ L2: []
 L3:
   Device1:
     cosdt/DownStream2: [can-gaa-hou, ffforg]
-  Device2:
-    can-gaa-hou/DownStream2: [can-gaa-hou]
 
-L4: []
+L4:
+  - can-gaa-hou/DownStream2: [can-gaa-hou]
