@@ -5,7 +5,8 @@ L2:
   - kerer-ai/pytorch
 
 L3:
-  - cosdt/DownStream2: [can-gaa-hou, ffforg]
+  Device1:
+    cosdt/DownStream2: [can-gaa-hou, ffforg]
 
 L4:
   - can-gaa-hou/DownStream2: [can-gaa-hou]
