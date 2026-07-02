@@ -60,13 +60,17 @@ runs:
           core.setSecret(token);
           core.setOutput('token', token);
 
-    # Resolve this job's numeric id so the relay can store it on the upstream
-    # check run and re-run exactly this job (not the whole workflow) on a
-    # re-request. GitHub exposes no context var for the numeric job id, so we
-    # look it up via the jobs API and match ourselves by runner + in_progress
-    # state (a runner runs one job at a time). Requires `actions: read`.
-    # Hard-fails if the id cannot be resolved: a missing job_id is a real error
-    # (usually a missing `actions: read` permission), not something to paper over.
+    # Resolve this job's numeric id (no context var exposes it) so the relay can
+    # store it on the check run and re-run just this job on a re-request. Match
+    # ourselves in the jobs API by runner_name — a runner runs one job at a time.
+    #
+    # The jobs API is an async, read-only view: right after start it can briefly
+    # still show our own job as queued / without a runner_name, even though it is
+    # really running. That lag is transient, so we retry up to 6x/3s (~15s cap,
+    # well over the usual few-seconds lag; stops on first match) and match on
+    # status != 'completed' rather than == 'in_progress'. If it still fails after
+    # retries it's a real error (missing `actions: read`, cancelled job, API
+    # outage), so we hard-fail. Requires `actions: read`.
     - name: Resolve numeric job id
       id: jobid
       uses: actions/github-script@v7
@@ -74,19 +78,26 @@ runs:
         RUN_ATTEMPT: ${{ github.run_attempt }}
       with:
         script: |
-          const jobs = await github.paginate(
-            github.rest.actions.listJobsForWorkflowRunAttempt, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.runId,
-              attempt_number: Number(process.env.RUN_ATTEMPT),
-            });
-          const me = jobs.find(
-            j => j.runner_name === process.env.RUNNER_NAME
-                 && j.status === 'in_progress');
+          const wanted = process.env.RUNNER_NAME;
+          const attempt = Number(process.env.RUN_ATTEMPT);
+          let me = null;
+          for (let i = 0; i < 6 && !me; i++) {
+            if (i > 0) await new Promise(r => setTimeout(r, 3000));
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRunAttempt, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: context.runId,
+                attempt_number: attempt,
+              });
+            // Match by runner only, and prefer a still-running record. Filtering
+            // on status === 'in_progress' races the API's lag at job start.
+            me = jobs.find(
+              j => j.runner_name === wanted && j.status !== 'completed');
+          }
           if (!me) {
             throw new Error(
-              `could not resolve numeric job id (runner=${process.env.RUNNER_NAME}); ` +
+              `could not resolve numeric job id (runner=${wanted}); ` +
               `ensure the calling workflow grants 'actions: read'`);
           }
           core.setOutput('job_id', String(me.id));
