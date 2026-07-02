@@ -1,10 +1,5 @@
 L1:
   - cosdt/DownStream1
 
-L2:
-  - cosdt/DownStream2
-  - can-gaa-hou/DownStream2
-
-L3: []
 
 L4: []
