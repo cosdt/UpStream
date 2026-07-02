@@ -184,12 +184,20 @@ runs:
         PYEOF
         )
 
+        # --retry retries only transient failures (429, 408, 5xx, timeouts) with
+        # exponential backoff and honors any Retry-After header; it does NOT retry
+        # permanent 4xx (400/401/403/404/422), so a real rejection still fails
+        # fast. --retry-connrefused also retries a refused connection. This makes
+        # the callback resilient to bursts (e.g. many matrix legs) briefly getting
+        # rate-limited or Lambda-throttled instead of hard-failing the job.
         set +e
         HTTP_CODE=$(
           curl --silent --show-error --fail-with-body --output /tmp/relay_response.json \
             --write-out "%{http_code}" \
             -X POST \
             --max-time ${MAX_TIME} \
+            --retry 5 \
+            --retry-connrefused \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${OIDC_TOKEN}" \
             --data "${PAYLOAD}" \
