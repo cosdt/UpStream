@@ -50,11 +50,12 @@ inputs:
   job-name:
     description: >
       Identifier for this job, used to name the upstream check run
-      (crcr/<repo>/<workflow>/<job-name>). Defaults to `github.job`, the job's
-      key in the workflow file, which is fine for a normal single job. For a
-      MATRIX job every leg shares the same `github.job`, so you MUST pass a value
-      that includes the matrix values (e.g. "build-${{ matrix.config }}") to give
-      each leg its own check run; otherwise the legs collide on the same name.
+      (crcr/<repo>/<workflow>/<job-name>). Defaults to github.job, the job's key
+      in the workflow file, which is fine for a normal single job. For a MATRIX
+      job every leg shares the same github.job, so you MUST pass a value that
+      includes the matrix values (for example a job-name of "build-cpu" /
+      "build-cuda" for a matrix over cpu/cuda) to give each leg its own check
+      run; otherwise the legs collide on the same name.
     required: false
     default: ${{ github.job }}
 
