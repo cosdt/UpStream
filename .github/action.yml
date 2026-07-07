@@ -152,29 +152,54 @@ runs:
         PYEOF
         )
 
-        set +e
-        HTTP_CODE=$(
-          curl --silent --show-error --fail-with-body --output /tmp/relay_response.json \
-            --write-out "%{http_code}" \
-            -X POST \
-            --max-time ${MAX_TIME} \
-            --retry 5 \
-            --retry-connrefused \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${OIDC_TOKEN}" \
-            --data "${PAYLOAD}" \
-            "${CALLBACK_URL%/}"
-        )
-        CURL_EXIT_CODE=$?
-        set -e
+        # Manual retry loop: print each attempt's HTTP code AND response body,
+        # so transient 429s are visible (curl --retry hides intermediate bodies
+        # because --output only keeps the last attempt's body). Retry only
+        # transient failures (429 / 5xx / transport error 000); permanent 4xx
+        # fail fast.
+        MAX_ATTEMPTS=5
+        attempt=1
+        while :; do
+          set +e
+          HTTP_CODE=$(
+            curl --silent --show-error \
+              --output /tmp/relay_response.json \
+              --write-out "%{http_code}" \
+              -X POST \
+              --max-time "${MAX_TIME}" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer ${OIDC_TOKEN}" \
+              --data "${PAYLOAD}" \
+              "${CALLBACK_URL%/}"
+          )
+          CURL_EXIT_CODE=$?
+          set -e
 
-        if [[ "${CURL_EXIT_CODE}" -ne 0 ]]; then
-          echo "::error::Callback server returned HTTP ${HTTP_CODE}."
+          echo "----- callback attempt ${attempt}/${MAX_ATTEMPTS}: curl_exit=${CURL_EXIT_CODE} http=${HTTP_CODE} -----"
           if [[ -s /tmp/relay_response.json ]]; then
-            echo "Relay server error response body:"
-            cat /tmp/relay_response.json
+            echo "response body: $(cat /tmp/relay_response.json)"
+          else
+            echo "response body: <empty>"
           fi
-          exit "${CURL_EXIT_CODE}"
-        fi
 
-        echo "Relay server response HTTP: ${HTTP_CODE}"
+          # 2xx → success
+          if [[ "${CURL_EXIT_CODE}" -eq 0 && "${HTTP_CODE}" -ge 200 && "${HTTP_CODE}" -lt 300 ]]; then
+            echo "Relay server response HTTP: ${HTTP_CODE}"
+            break
+          fi
+
+          # Retry transient failures only
+          if [[ "${attempt}" -lt "${MAX_ATTEMPTS}" ]] \
+             && { [[ "${HTTP_CODE}" == "429" ]] \
+                  || [[ "${HTTP_CODE}" =~ ^5[0-9][0-9]$ ]] \
+                  || [[ "${HTTP_CODE}" == "000" ]]; }; then
+            backoff=$(( 2 ** (attempt - 1) ))
+            echo "transient failure (HTTP ${HTTP_CODE}); retrying in ${backoff}s..."
+            sleep "${backoff}"
+            attempt=$(( attempt + 1 ))
+            continue
+          fi
+
+          echo "::error::Callback server returned HTTP ${HTTP_CODE} (see response body above)."
+          exit 1
+        done
