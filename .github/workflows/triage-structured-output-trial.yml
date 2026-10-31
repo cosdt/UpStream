@@ -14,7 +14,7 @@ name: Triage structured-output trial
 #   - variable TRIAGE_AWS_ROLE_ARN: an AWS role that trusts this repo's GitHub OIDC
 #     identity and grants Bedrock access.
 # If more than one is set, Bedrock wins, then the OAuth token, then the API key.
-# Bedrock runs in the region of the variable TRIAGE_AWS_REGION (default us-east-2).
+# Bedrock runs in the region of the variable TRIAGE_AWS_REGION (default us-east-1, as in test-infra).
 #
 # The model is Claude Haiku 5.5. Set the variable TRIAGE_MODEL to try another one.
 
@@ -76,7 +76,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           role-to-assume: ${{ vars.TRIAGE_AWS_ROLE_ARN }}
-          aws-region: ${{ vars.TRIAGE_AWS_REGION || 'us-east-2' }}
+          aws-region: ${{ vars.TRIAGE_AWS_REGION || 'us-east-1' }}
           role-duration-seconds: 3600
 
       # --json-schema makes Claude Code add a StructuredOutput tool whose parameters are
