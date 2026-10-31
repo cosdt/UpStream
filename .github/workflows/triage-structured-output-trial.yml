@@ -8,9 +8,14 @@ name: Triage structured-output trial
 # the CRCR relay.
 #
 # Configure ONE of:
-#   - repository variable TRIAGE_AWS_ROLE_ARN: an AWS role that trusts this repo's
-#     GitHub OIDC identity and grants Bedrock access (Bedrock path), or
-#   - repository secret ANTHROPIC_API_KEY (Anthropic API path).
+#   - secret CLAUDE_CODE_OAUTH_TOKEN: a Claude Pro/Max login, made locally with
+#     `claude setup-token` (uses the plan's usage limits, not API credits), or
+#   - secret ANTHROPIC_API_KEY: an Anthropic API key from an active Console org, or
+#   - variable TRIAGE_AWS_ROLE_ARN: an AWS role that trusts this repo's GitHub OIDC
+#     identity and grants Bedrock access.
+# If more than one is set, Bedrock wins, then the OAuth token, then the API key.
+#
+# The model is Claude Haiku 5.5. Set the variable TRIAGE_MODEL to try another one.
 
 on:
   workflow_dispatch:
@@ -26,16 +31,17 @@ jobs:
     timeout-minutes: 30
     env:
       BEDROCK: ${{ vars.TRIAGE_AWS_ROLE_ARN != '' }}
-      MODEL: ${{ vars.TRIAGE_AWS_ROLE_ARN != '' && 'global.anthropic.claude-opus-5-5' || 'claude-opus-5-5' }}
+      MODEL: ${{ vars.TRIAGE_MODEL || (vars.TRIAGE_AWS_ROLE_ARN != '' && 'global.anthropic.claude-haiku-5-5' || 'claude-haiku-5-5') }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Check the model credentials are configured
         env:
           HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+          HAS_OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
         run: |
-          if [[ "${BEDROCK}" != "true" && "${HAS_API_KEY}" != "true" ]]; then
-            echo "::error::Set the repository variable TRIAGE_AWS_ROLE_ARN (Bedrock) or the secret ANTHROPIC_API_KEY."
+          if [[ "${BEDROCK}" != "true" && "${HAS_API_KEY}" != "true" && "${HAS_OAUTH}" != "true" ]]; then
+            echo "::error::Set the secret CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY, or the variable TRIAGE_AWS_ROLE_ARN (Bedrock)."
             exit 1
           fi
 
@@ -82,7 +88,10 @@ jobs:
         uses: anthropics/claude-code-action@9ca9355b36297178e28d37c799d1c9c8a28e6507 # Claude Code 2.1.280
         with:
           use_bedrock: ${{ env.BEDROCK }}
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The action prefers an API key over the OAuth token, so only pass the key
+          # when no token is set. A stale key then cannot shadow a working login.
+          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN == '' && secrets.ANTHROPIC_API_KEY || '' }}
           show_full_output: "true"
           # Our own token, so the action does not depend on the Claude GitHub App
           # being installed on this repository.
@@ -138,13 +147,23 @@ jobs:
         env:
           VERDICT: ${{ steps.verdict.outputs.verdict }}
           SIM: ${{ steps.sim.outcome }}
+          # Written by the action even when it fails; the `execution_file` output is not.
+          EXEC_FILE: ${{ runner.temp }}/claude-execution-output.json
         run: |
           if [[ "${SIM}" != "failure" ]]; then
             echo "::error::The simulated failure did not fail (outcome: ${SIM:-skipped}), so nothing was tested."
             exit 1
           fi
           if [[ -z "${VERDICT}" ]]; then
-            echo "::error::No verdict came back. Look at the 'Root-cause analysis' step log."
+            # What the model run itself ended with, e.g. an API or account error. The
+            # text is untrusted, so flatten it to one line and cap it.
+            if [[ -s "${EXEC_FILE}" ]]; then
+              reason=$(jq -r '[.[] | select(.type == "result")] | last
+                | "\(.subtype // "?") is_error=\(.is_error // false) \(.api_error_code // "") \(.result // "")"' \
+                "${EXEC_FILE}" 2>/dev/null | tr '\n\r' '  ' | cut -c1-500 || true)
+              echo "::error::The model run ended with: ${reason:-unknown}"
+            fi
+            echo "::error::No verdict came back. See the 'Root-cause analysis' step log."
             exit 1
           fi
           echo "OK: the model returned a verdict through the structured output tool."
