@@ -136,7 +136,12 @@ runs:
           echo "No job with id '${CHECK_RUN_ID}' in the run; using the job key: ${name}"
         fi
         safe=$(printf '%s' "${name}" | tr -c 'A-Za-z0-9._-' '_')
-        tail -c 60000 "${LOG_FILE}" > "${in}/logs/${safe}.log"
+        if [[ -f "${LOG_FILE}" ]]; then
+          tail -c 60000 "${LOG_FILE}" > "${in}/logs/${safe}.log"
+        else
+          echo "::warning::log-file '${LOG_FILE}' does not exist; the model will get no output to read."
+          echo "(no output was captured)" > "${in}/logs/${safe}.log"
+        fi
         echo "job-name=${name}" >> "${GITHUB_OUTPUT}"
         # The verdict format, as the parameters of the tool the model must call.
         echo "TRIAGE_SCHEMA=$(jq -c . .claude/skills/crcr-test-failure-triage/verdict.schema.json)" >> "${GITHUB_ENV}"
