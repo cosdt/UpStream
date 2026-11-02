@@ -99,7 +99,7 @@ jobs:
           github_token: ${{ github.token }}
           claude_args: >-
             --model ${{ env.MODEL }}
-            --effort high
+            --effort medium
             --allowedTools "Read,Glob,Grep"
             --disallowedTools "Agent,Task"
             --json-schema '${{ env.TRIAGE_SCHEMA }}'
