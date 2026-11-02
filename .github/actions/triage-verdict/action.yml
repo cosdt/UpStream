@@ -1,32 +1,36 @@
+# Usage. Run it as a step of the failing job, after the job's work and BEFORE the
+# callback, so the verdict goes out with the job's own completed callback:
+#
+#   - run: ./work.sh 2>&1 | tee "${RUNNER_TEMP}/work.log"
+#   - id: triage
+#     if: failure()
+#     uses: ./.github/actions/triage-verdict
+#     with:
+#       log-file: ${{ runner.temp }}/work.log
+#       aws-role-arn: ${{ vars.CRCR_TRIAGE_AWS_ROLE_ARN }}
+#   - if: always()
+#     uses: pytorch/test-infra/.github/actions/cross-repo-ci-relay-callback@main
+#     with:
+#       status: completed
+#       conclusion: ${{ job.status }}
+#       triage-verdict: ${{ steps.triage.outputs.verdict }}
+#
+# The job needs `actions/checkout` first (the skill and the schema are read from the
+# checkout) and the permissions `actions: read` and, for Bedrock, `id-token: write`.
+#
+# Keep ${{ }} out of the `description` fields below: GitHub evaluates them as
+# expressions when it loads this file, and most contexts are not available there.
+
 name: Triage verdict
 
 description: >
   Explain why the job running this step failed, and return a CRCR triage-verdict
   (schema version 1) for the `triage-verdict` input of the cross-repo-ci-relay-callback
   action. A model reads the failure through the crcr-test-failure-triage skill and must
-  answer through a structured output tool whose parameters are the verdict schema.
-
-  Run it as a step of the failing job, after the job's work and BEFORE the callback, so
-  the verdict goes out with the job's own completed callback:
-
-    - run: ./work.sh 2>&1 | tee "${RUNNER_TEMP}/work.log"
-    - id: triage
-      if: failure()
-      uses: ./.github/actions/triage-verdict
-      with:
-        log-file: ${{ runner.temp }}/work.log
-        aws-role-arn: ${{ vars.CRCR_TRIAGE_AWS_ROLE_ARN }}
-    - if: always()
-      uses: pytorch/test-infra/.github/actions/cross-repo-ci-relay-callback@main
-      with:
-        status: completed
-        conclusion: ${{ job.status }}
-        triage-verdict: ${{ steps.triage.outputs.verdict }}
-
-  The job needs `actions/checkout` first (the skill and the schema are read from the
-  checkout) and the permissions `actions: read` and, for Bedrock, `id-token: write`.
-  The analysis is advisory: this action never fails the job, and without a verdict the
-  output is empty, which the callback ignores.
+  answer through a structured output tool whose parameters are the verdict schema. Run it
+  as a step of the failing job, before the callback. The analysis is advisory: this
+  action never fails the job, and without a verdict the output is empty, which the
+  callback ignores. See the comment at the top of this file for an example.
 
 inputs:
   log-file:
